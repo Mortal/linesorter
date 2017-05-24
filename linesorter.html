@@ -6,6 +6,7 @@
 <style>
 body {
 font-family: sans-serif;
+margin: 0;
 }
 #no-js {
 position: absolute;
@@ -21,16 +22,183 @@ font-weight: bold;
 }
 .sort-form {
 height: 100vh;
+width: 100%;
+display: flex;
+flex-direction: column;
 }
+.sort-form > .textareas {
+display: flex;
+flex-grow: 1;
+}
+.sort-form > .textareas > textarea {
+height: 100%;
+flex-grow: 1;
+}
+.options li {
+	list-style-type: none;
+}
+.options input[type=radio] {
+	margin-left: -1em;
+}
+.header { margin: 0 8px; }
 </style>
 <script>
+function lexcmp(a, b) {
+	if (typeof a === typeof []) {
+		for (var i = 0; i < a.length; ++i) {
+			if (i >= b.length) return 1;
+			var r = lexcmp(a[i], b[i]);
+			if (r != 0) return r;
+		}
+		return b.length - a.length;
+	}
+	return a == b ? 0 : (a < b ? -1 : 1);
+}
+
+var linestyles = {
+	'standard': {
+		'name': 'Standard'
+	},
+	'tex': {
+		'name': 'TeX'
+	}
+};
+
+linestyles.standard.split = function standard_split(s) {
+	return s.replace(/\r\n|\r|\n/g, '\n').split('\n');
+};
+linestyles.standard.join = function standard_join(s) {
+	return s.join('\n');
+};
+
+linestyles.tex.split = function tex_split(s) {
+	return s.replace(/(\\\\ *)?(\r\n|\r|\n)/g, '\n').split('\n');
+};
+linestyles.tex.join = function tex_join(s) {
+	return s.join('\\\\\n');
+};
+
+var handlers = {
+	'standard': {
+		'name': 'Standard'
+	},
+	'tk': {
+		'name': 'TK-titler'
+	}
+};
+
+handlers.standard.parse = function parse_lines_standard(s) {
+	return [s.trim().toLowerCase(), s];
+};
+handlers.standard.display = function display_standard(s) {
+	return s[1];
+};
+
+function tk_parse(s) {
+	var pattern = /(?:(BEST|CERM|FORM|INKA|KASS|NF|PR|SEKR|VC)|(EFU..)|(FU..)|([GBOTK][0-9]*)|(.*))/g;
+	var title = '';
+	var fu = 0;
+	var pref = 0;
+	var prefixes = {'G': 1, 'B': 2, 'O': 3, 'T': 1, 'K': -1};
+	while (true) {
+		var mo = pattern.exec(s);
+		if (mo === null || mo[0] === '') break;
+		if (mo[1]) {
+			fu = 0;
+			title = mo[1];
+		} else if (mo[2]) {
+			fu = 1;
+			title = mo[2];
+		} else if (mo[3]) {
+			fu = 2;
+			title = mo[3];
+		} else if (mo[4]) {
+			var exp = mo[4].substring(1) || '1';
+			pref += prefixes[mo[4][0]] * parseInt(exp);
+		}
+	}
+	return title ? [pref, fu, title] : null;
+}
+
+handlers.tk.parse = function parse_lines_tk(s) {
+	var r = tk_parse(s);
+	return r ? [0, r, s.trim().toLowerCase(), s] : [1, 0, s.trim().toLowerCase(), s];
+};
+handlers.tk.display = function display_tk(s) {
+	return s[3];
+};
+
+function onchange() {
+	var linestyle = linestyles[radio_selected.linestyle];
+	var handler = handlers[radio_selected.handler];
+
+	var input_element = document.getElementById('id_input');
+	var output_element = document.getElementById('id_output');
+	var lines = linestyle.split(input_element.value);
+	lines = lines.map((o, i) => [handler.parse(o), i]);
+	lines.sort(lexcmp);
+	lines = lines.map((o) => handler.display(o[0]));
+	output_element.value = linestyle.join(lines);
+}
+
+var radio_selected = {
+	'handler': 'standard',
+	'linestyle': 'standard'
+};
+function radiochange(ev) {
+	if (ev.target.checked)
+		radio_selected[ev.target.name] = ev.target.value;
+	else
+		console.log("Not checked!");
+	onchange();
+}
+
+function init() {
+	var input_element = document.getElementById('id_input');
+	var output_element = document.getElementById('id_output');
+	input_element.addEventListener('change', onchange, false);
+	input_element.addEventListener('input', onchange, false);
+
+	var radios = [].slice.call(
+		document.querySelectorAll('.options input[type=radio]'));
+	for (var i = 0; i < radios.length; ++i) {
+		radios[i].addEventListener('click', radiochange, false);
+		radios[i].addEventListener('change', radiochange, false);
+		if (radios[i].checked)
+			radio_selected[radios[i].name] = radios[i].value;
+	}
+
+	onchange();
+}
+
+window.addEventListener('load', init, false);
+
 </script>
 </head>
 <body>
 <div id="no-js">Du skal slå JavaScript til i din browser!</div>
+<script>document.getElementById('no-js').style.display='none';</script>
 <div class="sort-form">
+<div class="header">
+	<p>Indsæt din tekst der skal sorteres i tekstfeltet til venstre,
+	og kopiér sorterede linjer ud af tekstfeltet til højre.
+	Du kan vælge at indsætte TeX-linjeskift (<tt>\\</tt>)
+	og/eller sortere efter TK-titler.</p>
+</div>
+<div class="textareas">
 <textarea id="id_input"></textarea>
 <textarea id="id_output"></textarea>
+</div>
+<div class="options">
+	<ul>
+		<li><label><input type="radio" name="handler" value="standard" checked /> Standard</label></li>
+		<li><label><input type="radio" name="handler" value="tk" /> TK-titler</label></li>
+	</ul>
+	<ul>
+		<li><label><input type="radio" name="linestyle" value="standard" checked /> Standard</label></li>
+		<li><label><input type="radio" name="linestyle" value="tex" /> TeX</label></li>
+	</ul>
+</div>
 </div>
 </body>
 </html>
